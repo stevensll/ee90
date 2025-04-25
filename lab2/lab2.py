@@ -202,7 +202,7 @@ def test_on_off():
         time.sleep(DT)
 
     on_off_data.close()
-
+# 30 min PID test
 def pid_test():
     # Setup hardware
     i2c = board.I2C()  # uses board.SCL and board.SDA
@@ -275,7 +275,7 @@ LONG_RUN_TIME = 120 # in mins
 MAX_TEMP = 313.547
 MAX_75_VALUE = (MAX_TEMP - SETPOINT )* .75 + SETPOINT
 MAX_25_VALUE = (MAX_TEMP - SETPOINT )* .25 + SETPOINT
-
+# 2 hour long test
 def long_test():
     # Setup hardware
     i2c = board.I2C()  # uses board.SCL and board.SDA
