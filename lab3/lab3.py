@@ -17,17 +17,6 @@ POT_MAX_BIT = 127
 SWEEP_MIN_DELAY = 0
 SWEEP_MAX_DELAY = 2000
 
-def set_gpio(bit0, bit1):
-    # Initialize GPIO0
-    gpio0 = digitalio.DigitalInOut(board.G0)
-    gpio0.direction = digitalio.Direction.OUTPUT
-    gpio0.value = bit0  
-    # Initialize GPIO1
-    gpio1 = digitalio.DigitalInOut(board.G1)
-    gpio1.direction = digitalio.Direction.OUTPUT
-    gpio1.value = bit1  
-
-
 '''
 Conducts the sine test by adjusting the digital potentiometer.
 There is an option to manually set the bit value or sweep through from 0 to 127 with a specified duration.
@@ -60,6 +49,11 @@ def sine_test(pot):
         except ValueError:
             print(f"Invalid input. Please enter an integer from {POT_MIN_BIT} to {POT_MAX_BIT} or select the sweep function.")
 
+'''
+Conducts the test for square/triangle wave by allowing for input to adjust
+both potentiometers. The user can also select the capacitor to use
+from the capacitor bank with GPIO.
+'''
 
 def square_tri_test(sw_pot, fdbk_pot, gpio0, gpio1):
 
@@ -90,7 +84,7 @@ def square_tri_test(sw_pot, fdbk_pot, gpio0, gpio1):
             
             if not (POT_MIN_BIT <= fdbk_pot_val <= POT_MAX_BIT):
                 print("fdbk_pot value must be between 0 and 127.")
-            continue
+                continue
 
             if bit0 not in [0, 1] or bit1 not in [0, 1]:
                 print("bit0 and bit1 must be either 0 or 1.")
@@ -98,10 +92,10 @@ def square_tri_test(sw_pot, fdbk_pot, gpio0, gpio1):
 
             # Set values
             sw_pot.wiper = sw_pot_val
-            fdbk_pot
+            fdbk_pot.wiper = fdbk_pot_val
             gpio0.value = bit0
             gpio1.value = bit1
-            print(f"SW_POT set to {wiper_val}, GPIO0 = {bit0}, GPIO1 = {bit1}")
+            print(f"SW_POT set to {sw_pot_val}, FDBK_POT set to {fdbk_pot_val}, GPIO0 = {bit0}, GPIO1 = {bit1}")
 
         # Handle faulty output
         except ValueError:
@@ -111,15 +105,24 @@ def main():
     i2c = busio.I2C(board.SCL, board.SDA)
     # Setup potentiometer connection
     sine_pot = adafruit_ds3502.DS3502(i2c, address=SINE_RES_ADDR)
-    # sw_pot = adafruit_ds3502.DS3502(i2c, address=SW_RES_ADDR)
-    # fdbk_pot = adafruit_ds3502.DS3502(i2c, address=FDBK_RES_ADDR)
+    sw_pot = adafruit_ds3502.DS3502(i2c, address=SW_RES_ADDR)
+    fdbk_pot = adafruit_ds3502.DS3502(i2c, address=FDBK_RES_ADDR)
     # Setup GPIO
     gpio0 = digitalio.DigitalInOut(board.G0)
     gpio0.direction = digitalio.Direction.OUTPUT
     gpio1 = digitalio.DigitalInOut(board.G1)
     gpio1.direction = digitalio.Direction.OUTPUT
 
-    sine_test(sine_pot)
-    # square_tri_test(sw_pot, fdbk_pot, gpio0, gpio1)
-if __name__ == "_main_":
+    #sine_test(sine_pot)
+    square_tri_test(sw_pot, fdbk_pot, gpio0, gpio1)
+if __name__ == "__main__":
     main()
+###                rc_pot  fdbk_pot   gpio0  gpio1    cap used
+### 116kHz           127    127       1      0          c39 220pF
+### 19.6kHz           0     74        1      0          c39 220pF
+### 96kHz           127    127        0      0          c38 3nf
+### 15.9 kHz         0      74        0      0          c38 3nf
+##  24.6 kHz        127     127       0      1           C37  22 nF
+##  3.9kHz          0       74        0      1           c37  22 nF
+##  1.15 kHz        127     127       1      1           c35  470 nf
+### 160 Hz          0       74        1      1           C35  470 nF
