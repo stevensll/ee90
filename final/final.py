@@ -3,7 +3,7 @@ import busio
 import digitalio
 import time
 import sys
-import adafruit_ads1x15.ads1015 as ADS
+import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 import adafruit_ds3502
 import adafruit_tca9548a
@@ -13,6 +13,10 @@ from CAT5132 import CAT5132
     See: https://learn.adafruit.com/circuitpython-libraries-on-any-computer-with-mcp2221/windows
     # in CMD_PROMPT
         pip3 install hidapi
+        pip install adafruit-circuitpython-ads1x15
+        pip install adafruit-circuitpython-ds3502
+        pip install adafruit-circuitpython-tca9548a
+
         pip3 install adafruit-blinka
 
         set BLINKA_MCP2221=1
@@ -21,11 +25,7 @@ from CAT5132 import CAT5132
         import board
         dir(board)
 
-    # in CMD_PROMPT
-        pip install adafruit-circuitpython-ads1x15
-        pip install adafruit-circuitpython-ds3502
-        pip install adafruit-circuitpython-tca9548a
-
+ 
 '''
 # I2C Addresses for pots
 ADDR_SQ_TRI_RC =    0x28
@@ -40,8 +40,20 @@ CHAN_SIN =          1
 
 POT_MIN_BIT = 0
 POT_MAX_BIT = 127
+V_REG_OFFSET = 0.25
+V_REG_MULT = 2
+ADS_GAIN = 2 / 3
 
-def test_adc():
+ADS_CHAN_V_REG = ADS.P0
+ADS_CHAN_I_REG = ADS.P1
+ADS_CHAN_PEAK  = ADS.P2
+
+def curr_sens_conv(curr_volt):
+    vs = 3.3
+    s = 0.2
+    return (curr_volt - (vs * 0.5) / s)
+
+def test_adc(i2c):
     '''
     DESCRIPTION:
         Tests the ADC by reading in the channel voltages.
@@ -53,22 +65,32 @@ def test_adc():
             AIN1 : I_REG_IN
             AIN2 : PEAK_IN 
     '''
-    # I2C setup
-    i2c = board.I2C()
+    
     # ADS setup
-    ads = ADS.ADS1015(i2c)
+    ads = ADS.ADS1115(i2c)
+    ads.gain = ADS_GAIN
     # Channel read
-    chan0 = AnalogIn(ads, ADS.P0)
-    chan1 = AnalogIn(ads, ADS.P1)
-    chan2 = AnalogIn(ads, ADS.P2)
+    chan0 = AnalogIn(ads, ADS_CHAN_V_REG)
+    chan1 = AnalogIn(ads, ADS_CHAN_I_REG)
+    chan2 = AnalogIn(ads, ADS_CHAN_PEAK)
     chan3 = AnalogIn(ads, ADS.P3)
     print((
-        f"A0 - V_REG_IN: {chan0.voltage}\n"
-        f"A1 - I_REG_IN: {chan1.voltage}\n"
+        f"A0 - V_REG_IN: {chan0.voltage * V_REG_MULT}\n"
+        f"A1 - I_REG_IN: {curr_sens_conv(chan1.voltage)}\n"
         f"A2 - PEAK_IN:  {chan2.voltage}\n"
         f"A3 - UNUSED:    {chan3.voltage}\n"
     ))
 
+def adc_print(ads):
+    # Channel read
+    v_reg = AnalogIn(ads, ADS_CHAN_V_REG).voltage * V_REG_MULT
+    i_reg = AnalogIn(ads, ADS_CHAN_I_REG).voltage
+    peak = AnalogIn(ads, ADS_CHAN_PEAK).voltage 
+    print((
+        f"A0 - V_REG_IN: {v_reg}\n"
+        f"A1 - I_REG_IN: {curr_sens_conv(i_reg)}\n"
+        f"A2 - PEAK_IN:  {peak}\n"
+    ))
 
 def is_valid_binary_input(user_input):
     return len(user_input) == 4 and all(char in ('0', '1') for char in user_input)
@@ -105,28 +127,27 @@ def test_gpio():
     gpio3.direction = digitalio.Direction.OUTPUT
 
     print("Enter 4 binary digits (0 or 1). Press Ctrl+C to quit.")
-    while True:
-        user_input = input("Input:").strip()
-        if is_valid_binary_input(user_input):
-            vals = [int(bit) for bit in user_input]
-            # Write to the GPIO.
-            gpio0.value = vals[0]
-            gpio1.value = vals[1]
-            gpio2.value = vals[2]
-            gpio3.value = vals[3]
-            print ((
-                "Set the following:\n"
-                f"\tSQ_TRI_BIT0, U141 pin 6 :  {gpio2.value}\n"
-                f"\tSQ_TRI_BIT1, U143 pin 6  : {gpio3.value}\n\n"
-                f"\tSIN_CAP1_0,  U142 pin 6  : {gpio0.value}\n"
-                f"\tSIN_CAP2_0,  U10  pin 6  : {gpio0.value}\n"
-                f"\tSIN_CAP3_0,  U12  pin 6  : {gpio0.value}\n\n"
-                f"\tSIN_CAP1_1,  U140 pin 6  : {gpio1.value}\n"
-                f"\tSIN_CAP2_1,  U30  pin 6  : {gpio1.value}\n"
-                f"\tSIN_CAP3_1,  U11  pin 6  : {gpio1.value}\n"
-            ))
-        else:
-            print("Invalid input. Please enter exactly 4 binary digits (0 or 1).")
+    user_input = input("Input:").strip()
+    if is_valid_binary_input(user_input):
+        vals = [int(bit) for bit in user_input]
+        # Write to the GPIO.
+        gpio0.value = vals[0]
+        gpio1.value = vals[1]
+        gpio2.value = vals[2]
+        gpio3.value = vals[3]
+        print ((
+            "Set the following:\n"
+            f"\tSQ_TRI_BIT0, U141 pin 6 :  {gpio2.value}\n"
+            f"\tSQ_TRI_BIT1, U143 pin 6  : {gpio3.value}\n\n"
+            f"\tSIN_CAP1_0,  U142 pin 6  : {gpio0.value}\n"
+            f"\tSIN_CAP2_0,  U10  pin 6  : {gpio0.value}\n"
+            f"\tSIN_CAP3_0,  U12  pin 6  : {gpio0.value}\n\n"
+            f"\tSIN_CAP1_1,  U140 pin 6  : {gpio1.value}\n"
+            f"\tSIN_CAP2_1,  U30  pin 6  : {gpio1.value}\n"
+            f"\tSIN_CAP3_1,  U11  pin 6  : {gpio1.value}\n"
+        ))
+    else:
+        print("Invalid input. Please enter exactly 4 binary digits (0 or 1).")
 
 '''
     DESCRIPTION:
@@ -196,13 +217,13 @@ def test_pot_old(i2c):
     pot_amp.wiper  =      64
     
 
-def square_tri_test(sw_pot, fdbk_pot, sq_tri_cap0, sq_tri_cap1):
+def square_tri_test(sw_pot, fdbk_pot, sq_tri_cap0, sq_tri_cap1, ads):
     '''
     Tests the square and triangle wave outputs.
     '''
     while True:
         try:
-            user_input = input("Enter RC pot (0–127), FDBK pot (0-127), Cap bit0 (0/1), Cap bit1 (0/1), or 'exit': ").strip()
+            user_input = input("Enter RC pot (0–127), FDBK pot (0-127), Cap bit1 (0/1), Cap bit0 (0/1), or 'exit': ").strip()
             if user_input.lower() == 'exit':
                 print("Exiting.")
                 break
@@ -217,8 +238,8 @@ def square_tri_test(sw_pot, fdbk_pot, sq_tri_cap0, sq_tri_cap1):
 
             sw_pot_val = int(parts[0])
             fdbk_pot_val = int(parts[1])
-            bit0 = int(parts[2])
-            bit1 = int(parts[3])
+            bit1 = int(parts[2])
+            bit0 = int(parts[3])
 
             # Validate ranges
             if not (POT_MIN_BIT <= sw_pot_val <= POT_MAX_BIT):
@@ -238,19 +259,88 @@ def square_tri_test(sw_pot, fdbk_pot, sq_tri_cap0, sq_tri_cap1):
             fdbk_pot.wiper = fdbk_pot_val
             sq_tri_cap0.value = bit0
             sq_tri_cap1.value = bit1
-            print(f"SW_POT set to {sw_pot_val}, FDBK_POT set to {fdbk_pot_val}, GPIO0 = {bit0}, GPIO1 = {bit1}")
-
+            print(f"\tSW_POT: {sw_pot_val}, \n\tFDBK_POT:{fdbk_pot_val}, \n\t CAP1: {bit1}, \n\tCAP0: {bit0}\n")
+            adc_print(ads)
         # Handle faulty output
         except ValueError:
             print("Invalid input. Format: <wiper 0–127> <bit0 0/1> <bit1 0/1> or choose sweep option.")
 
-def main():
-    i2c = board.I2C()
-    
-    test_adc()
-    # test_gpio()
+SWEEP_MIN_DELAY = 10
+SWEEP_MAX_DELAY = 1000
+def sine_test(rc_pots, amp_pot, sine_cap0, sine_cap1,ads):
+    while True:
+        try:
+            # Get main user input
+            user_input = input("SINE TEST: Enter RC and Amp value (0-127), cap bit1, cap bit0, or 'exit': ").strip()
+
+            if user_input.lower() == 'exit':
+                print("Exiting.")
+                sys.exit(0)
+
+            # elif user_input.lower() == 'sweep':
+            #     delay = int(input("Enter duration between each bit value (ms): ").strip())
+            #     if not (SWEEP_MIN_DELAY <= delay <= SWEEP_MAX_DELAY):
+            #         print(f"Delay must be between {SWEEP_MIN_DELAY} and {SWEEP_MAX_DELAY} ms.")
+            #         continue
+
+            #     bit1 = input("Enter bit0 (0 or 1): ").strip()
+            #     bit0 = input("Enter bit1 (0 or 1): ").strip()
+
+            #     if bit0 not in ('0', '1') or bit1 not in ('0', '1'):
+            #         print("bit0 and bit1 must be 0 or 1.")
+            #         continue
+
+            #     # for i in range(POT_MIN_BIT, POT_MAX_BIT + 1):
+            #     #     pot.wiper = i
+            #     #     print(f"Wiper: {i}, Bit0: {bit0}, Bit1: {bit1}")
+            #     #     time.sleep(delay / 1000.0)
+
+            else:
+                 # Split and parse the input
+                parts = user_input.split()
+                if len(parts) != 4:
+                    print("Please enter exactly 4 values: rc_pot amp_pot cap_bit1 cap_bit0")
+                    continue
+                rc_pot_val = int(parts[0])
+                amp_pot_val = int(parts[1])
+                if not (POT_MIN_BIT <= rc_pot_val <= POT_MAX_BIT):
+                    print(f"Wiper value must be between {POT_MIN_BIT} and {POT_MAX_BIT}.")
+                    continue
+
+                bit1 = int(parts[2])
+                bit0 = int(parts[3])
+
+                if bit0 not in (0, 1) or bit1 not in (0, 1):
+                    print("bit0 and bit1 must be 0 or 1.")
+                    continue
+
+                for rc_pot in rc_pots:
+                    rc_pot.wiper = rc_pot_val
+                amp_pot.wiper = amp_pot_val
+                sine_cap0.value = bit0
+                sine_cap1.value = bit1
+                print(f"\tRC_POT: {rc_pots[0].wiper} \n\tAMP_POT: {amp_pot.wiper} \n\tCAP_1: {bit1} \n\tCAP_0: {bit0}\n")
+                adc_print(ads)
+
+        except ValueError:
+            print(f"Invalid input. Please enter a number between {POT_MIN_BIT} and {POT_MAX_BIT}, 'sweep', or 'exit'.")
+        
+def run_all_tests(i2c):
+    test_gpio()
     test_i2c(i2c)
-    # test_pot_old(i2c) # don't use yet, not all pots soldered.
+    test_pot_old(i2c)
+    test_adc(i2c)
+
+def main():
+    #I2C 
+    i2c = board.I2C()
+
+    # Comment this out to stop setup tests.
+    # run_all_tests(i2c)
+
+    # ADS setup
+    ads = ADS.ADS1115(i2c)
+    ads.gain = ADS_GAIN
 
     # Setup GPIO
     gpio0 = digitalio.DigitalInOut(board.G0)
@@ -262,13 +352,20 @@ def main():
     gpio2.direction = digitalio.Direction.OUTPUT
     gpio3.direction = digitalio.Direction.OUTPUT
     
-    # Setup mux. These are the pots that currently work (6/5/2025 6:00 AM)
-    tca = adafruit_tca9548a.TCA9548A(i2c)
-    sq_tri_bus = tca[CHAN_SQR_TRI]
-    pot_sq_tri_rc =  adafruit_ds3502.DS3502(sq_tri_bus, address=ADDR_SQ_TRI_RC)
-    pot_sq_tri_fbk = adafruit_ds3502.DS3502(sq_tri_bus, address=ADDR_SQ_TRI_FBK)
+    # Setup mux. These are the pots that currently work
+    tca =               adafruit_tca9548a.TCA9548A(i2c)
+    sq_tri_bus =        tca[CHAN_SQR_TRI]
+    sin_bus =           tca[CHAN_SIN]
+    pot_sq_tri_rc =     adafruit_ds3502.DS3502(sq_tri_bus, address=ADDR_SQ_TRI_RC)
+    pot_sq_tri_fbk =    adafruit_ds3502.DS3502(sq_tri_bus, address=ADDR_SQ_TRI_FBK)
+    pot_sin1 =          adafruit_ds3502.DS3502(sin_bus,    address=ADDR_SIN1)
+    pot_sin2 =          adafruit_ds3502.DS3502(sin_bus,    address=ADDR_SIN2)
+    pot_sin3 =          adafruit_ds3502.DS3502(sin_bus,    address=ADDR_SIN3)
+    pot_amp  =          adafruit_ds3502.DS3502(sin_bus,    address=ADDR_AMP)
+
     
-    square_tri_test(pot_sq_tri_rc, pot_sq_tri_fbk, gpio2, gpio3)
+    square_tri_test(pot_sq_tri_rc, pot_sq_tri_fbk, gpio2, gpio3, ads)
+    # sine_test([pot_sin1, pot_sin2, pot_sin3], pot_amp, gpio0, gpio1, ads)
 
 if __name__ == "__main__":
     main()
