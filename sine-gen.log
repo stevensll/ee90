@@ -1,0 +1,35 @@
+LTspice 24.1.6 for Windows
+Circuit: C:\Users\Steven\Documents\ee90\sine-gen.net
+Start Time: Thu Jun  5 22:25:14 2025
+solver = Normal
+Maximum thread count: 24
+tnom = 27
+temp = 27
+method = trap
+Instance "u1:M1": Length shorter than recommended for a level 2 MOSFET.
+Instance "u1:M2": Length shorter than recommended for a level 2 MOSFET.
+Instance "u1:M3": Length shorter than recommended for a level 2 MOSFET.
+Instance "u1:M4": Length shorter than recommended for a level 2 MOSFET.
+Instance "u2:M1": Length shorter than recommended for a level 2 MOSFET.
+Instance "u2:M2": Length shorter than recommended for a level 2 MOSFET.
+Instance "u2:M3": Length shorter than recommended for a level 2 MOSFET.
+Instance "u2:M4": Length shorter than recommended for a level 2 MOSFET.
+Instance "u3:M1": Length shorter than recommended for a level 2 MOSFET.
+Instance "u3:M2": Length shorter than recommended for a level 2 MOSFET.
+Instance "u3:M3": Length shorter than recommended for a level 2 MOSFET.
+Instance "u3:M4": Length shorter than recommended for a level 2 MOSFET.
+Instance "u4:M1": Length shorter than recommended for a level 2 MOSFET.
+Instance "u4:M2": Length shorter than recommended for a level 2 MOSFET.
+Instance "u4:M3": Length shorter than recommended for a level 2 MOSFET.
+Instance "u4:M4": Length shorter than recommended for a level 2 MOSFET.
+Instance "u5:M1": Length shorter than recommended for a level 2 MOSFET.
+Instance "u5:M2": Length shorter than recommended for a level 2 MOSFET.
+Instance "u5:M3": Length shorter than recommended for a level 2 MOSFET.
+Instance "u5:M4": Length shorter than recommended for a level 2 MOSFET.
+Direct Newton iteration for .op point succeeded.
+Total elapsed time: 0.599 seconds.
+
+Files loaded:
+C:\Users\Steven\Documents\ee90\sine-gen.net
+C:\Users\Steven\AppData\Local\LTspice\lib\sub\ADI1.lib
+
