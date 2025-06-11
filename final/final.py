@@ -8,7 +8,6 @@ from adafruit_ads1x15.analog_in import AnalogIn
 import adafruit_ds3502
 import adafruit_tca9548a
 
-from CAT5132 import CAT5132
 ''' NOTE: YOU might need to run the following commands:
     See: https://learn.adafruit.com/circuitpython-libraries-on-any-computer-with-mcp2221/windows
     # in CMD_PROMPT
@@ -16,17 +15,14 @@ from CAT5132 import CAT5132
         pip install adafruit-circuitpython-ads1x15
         pip install adafruit-circuitpython-ds3502
         pip install adafruit-circuitpython-tca9548a
-
         pip3 install adafruit-blinka
-
         set BLINKA_MCP2221=1
 
-    # in python
+    # in python to test board connection:
         import board
         dir(board)
-
- 
 '''
+
 # I2C Addresses for pots
 ADDR_SQ_TRI_RC =    0x28
 ADDR_SQ_TRI_FBK =   0x29
@@ -48,6 +44,12 @@ ADS_CHAN_V_REG = ADS.P0
 ADS_CHAN_I_REG = ADS.P1
 ADS_CHAN_PEAK  = ADS.P2
 
+'''
+    DESCRIPTION:
+        Converts the voltage sensed by the current sensor to a current value.
+            See: https://www.ti.com/lit/ds/symlink/tmcs1108.pdf?ts=1749173283870&ref_url=https%253A%252F%252Fwww.ti.com%252Fproduct%252FTMCS1108%252Fpart-details%252FTMCS1108A1BQDR
+    NOTE: Currently does not work, as current sensor is wired incorrectly on PCB.
+'''
 def curr_sens_conv(curr_volt):
     vs = 3.3
     s = 0.2
@@ -64,6 +66,7 @@ def test_adc(i2c):
             AIN0 : V_REG_IN 
             AIN1 : I_REG_IN
             AIN2 : PEAK_IN 
+            AIN3 : Unused
     '''
     
     # ADS setup
@@ -75,12 +78,17 @@ def test_adc(i2c):
     chan2 = AnalogIn(ads, ADS_CHAN_PEAK)
     chan3 = AnalogIn(ads, ADS.P3)
     print((
-        f"A0 - V_REG_IN: {chan0.voltage * V_REG_MULT}\n"
-        f"A1 - I_REG_IN: {curr_sens_conv(chan1.voltage)}\n"
-        f"A2 - PEAK_IN:  {chan2.voltage}\n"
-        f"A3 - UNUSED:    {chan3.voltage}\n"
+        "ADC readings:\n"
+        f"\tA0 - V_REG_IN: {chan0.voltage * V_REG_MULT}\n"
+        f"\tA1 - I_REG_IN: {curr_sens_conv(chan1.voltage)}\n"
+        f"\tA2 - PEAK_IN:  {chan2.voltage}\n"
+        f"\tA3 - UNUSED:    {chan3.voltage}\n"
     ))
 
+'''
+    DESCRPITION:
+        Prints out all three channel values from the ADS.
+'''
 def adc_print(ads):
     # Channel read
     v_reg = AnalogIn(ads, ADS_CHAN_V_REG).voltage * V_REG_MULT
@@ -89,9 +97,13 @@ def adc_print(ads):
     print((
         f"A0 - V_REG_IN: {v_reg}\n"
         f"A1 - I_REG_IN: {curr_sens_conv(i_reg)}\n"
-        f"A2 - PEAK_IN:  {peak}\n"
+        f"A2 - SIN_AMP_PEAK_IN:  {peak}\n"
     ))
 
+'''
+    DESCRIPTION:
+        Helper function for test_gpio() to ensure input is binary.
+'''
 def is_valid_binary_input(user_input):
     return len(user_input) == 4 and all(char in ('0', '1') for char in user_input)
 
@@ -109,10 +121,12 @@ def test_gpio():
             GPIO 3 : SQ_TRI_BIT1
 
     EXPECTED:
-        ALL GPIO Pins should be HIGH (3.3V)
+        GPIO Pin readings should match the user input, probe at the SN74LVC 
+        switch input.
+    
         Probe SQ_TRI_BIT0 at R12
         Probe SQ_TRI_BIT1 at R9
-        
+    
         SINBIT0 should modify SIN_CAP1_0, SIN_CAP2_0, SIN_CAP3_0
         SINBIT1 should modify SIN_CAP1_1, SIN_CAP2_1, SIN_CAP3_1
     '''
@@ -126,7 +140,7 @@ def test_gpio():
     gpio2.direction = digitalio.Direction.OUTPUT
     gpio3.direction = digitalio.Direction.OUTPUT
 
-    print("Enter 4 binary digits (0 or 1). Press Ctrl+C to quit.")
+    print("Enter GPIO 0 - 3 binary digits (0 or 1). Press Ctrl+C to quit.")
     user_input = input("Input:").strip()
     if is_valid_binary_input(user_input):
         vals = [int(bit) for bit in user_input]
@@ -151,7 +165,7 @@ def test_gpio():
 
 '''
     DESCRIPTION:
-        Tests the MCP2221 I2C readout to view th eTCA9548A and ADS11115.
+        Tests the MCP2221 I2C readout to view the TCA9548A and ADS11115.
         Then tests the I2C addresses by connecting to the TCA9548A multiplexer and 
         reading the addresses on each channel.
             See: https://learn.adafruit.com/adafruit-tca9548a-1-to-8-i2c-multiplexer-breakout/circuitpython-python
@@ -170,7 +184,7 @@ def test_i2c(i2c):
         i2c.unlock()
     
     tca = adafruit_tca9548a.TCA9548A(i2c)
-    
+    # Now scan addresses on each channel.
     if tca[CHAN_SQR_TRI].try_lock():
         print(f"\tMux channel {CHAN_SQR_TRI} found:", end="")
         addresses = tca[CHAN_SQR_TRI].scan()
@@ -182,7 +196,7 @@ def test_i2c(i2c):
         addresses = tca[CHAN_SIN].scan()
         print([hex(address) for address in addresses if address != 0x70 and address !=0x48])
         tca[CHAN_SIN].unlock()
-
+    print("\n")
 
 def test_pot_old(i2c):
     '''
@@ -193,7 +207,7 @@ def test_pot_old(i2c):
     EXPECTED:
         I2C should connect without failure, if there is a failure, please debug. 
         Pot resistances should be set to halfway (5k)
-        Can't really probe this, must test on the circuit itself if connected to power.
+        Can disconnect pots from series resistors and probe resistance.
         Should check input to pots if the addresses are correct.
     '''
     # Mux setup
@@ -216,30 +230,32 @@ def test_pot_old(i2c):
     pot_sin3.wiper =      64
     pot_amp.wiper  =      64
     
+sq_tri_freq_map =  {
+    'low': [1,1],
+    'mid': [1,0],
+    'high': [0,0]
+}
 
-def square_tri_test(sw_pot, fdbk_pot, sq_tri_cap0, sq_tri_cap1, ads):
+def config_sq_tri(sw_pot, fdbk_pot, sq_tri_cap0, sq_tri_cap1, ads):
     '''
     Tests the square and triangle wave outputs.
     '''
     while True:
         try:
-            user_input = input("Enter RC pot (0–127), FDBK pot (0-127), Cap bit1 (0/1), Cap bit0 (0/1), or 'exit': ").strip()
+            user_input = input("Sq/Tri configurator: Enter RC pot (0–127), FDBK pot (0-127), Freq mode (low, mid, high) or 'exit': ").strip()
             if user_input.lower() == 'exit':
                 print("Exiting.")
                 break
 
-            # Manual mode
-
             # Split and parse the input
             parts = user_input.split()
-            if len(parts) != 4:
-                print("Please enter exactly four values: sw_pot fdbk_pot bit0 bit1")
+            if len(parts) != 3:
+                print("Please enter values: rc_pot fdbk_pot freq_mode")
                 continue
 
             sw_pot_val = int(parts[0])
             fdbk_pot_val = int(parts[1])
-            bit1 = int(parts[2])
-            bit0 = int(parts[3])
+            freq_mode = parts[2]
 
             # Validate ranges
             if not (POT_MIN_BIT <= sw_pot_val <= POT_MAX_BIT):
@@ -250,80 +266,75 @@ def square_tri_test(sw_pot, fdbk_pot, sq_tri_cap0, sq_tri_cap1, ads):
                 print("fdbk_pot value must be between 0 and 127.")
                 continue
 
-            if bit0 not in [0, 1] or bit1 not in [0, 1]:
-                print("bit0 and bit1 must be either 0 or 1.")
+            if freq_mode not in sq_tri_freq_map:
+                print("Freq mode must be: low, mid, or high.")
                 continue
+            sw_pot_val = int(parts[0])
+            fdbk_pot_val = int(parts[1])
+            
+            cap0 = sq_tri_freq_map[freq_mode][0]
+            cap1 = sq_tri_freq_map[freq_mode][1]
 
             # Set values
             sw_pot.wiper = sw_pot_val
             fdbk_pot.wiper = fdbk_pot_val
-            sq_tri_cap0.value = bit0
-            sq_tri_cap1.value = bit1
-            print(f"\tSW_POT: {sw_pot_val}, \n\tFDBK_POT:{fdbk_pot_val}, \n\t CAP1: {bit1}, \n\tCAP0: {bit0}\n")
+            sq_tri_cap0.value = cap0
+            sq_tri_cap1.value = cap1
+            # Print updated values and ADS readings.
+            print(f"\tSW_POT: {sw_pot_val} \n\tFDBK_POT:{fdbk_pot_val} \n\tCAP1: {cap1} \n\tCAP0: {cap0}\n")
             adc_print(ads)
         # Handle faulty output
         except ValueError:
-            print("Invalid input. Format: <wiper 0–127> <bit0 0/1> <bit1 0/1> or choose sweep option.")
+            print("Invalid input. Format: <RC_POT 0–127> <FBK_POT 0-127> <Freq mode (low/mid/high)")
 
-SWEEP_MIN_DELAY = 10
-SWEEP_MAX_DELAY = 1000
-def sine_test(rc_pots, amp_pot, sine_cap0, sine_cap1,ads):
+sine_freq_map = {
+    'low' : [0,0],
+    'mid' : [1,1],
+    'high': [0,1]
+}
+
+def config_sine(rc_pots, amp_pot, sine_cap0, sine_cap1,ads):
     while True:
         try:
             # Get main user input
-            user_input = input("SINE TEST: Enter RC and Amp value (0-127), cap bit1, cap bit0, or 'exit': ").strip()
+            user_input = input("Sin configurator: Enter RC pot (0-127), Amp pot (0-127), and freq mode (low, mid, high) or 'exit': ").strip()
 
             if user_input.lower() == 'exit':
                 print("Exiting.")
-                sys.exit(0)
-
-            # elif user_input.lower() == 'sweep':
-            #     delay = int(input("Enter duration between each bit value (ms): ").strip())
-            #     if not (SWEEP_MIN_DELAY <= delay <= SWEEP_MAX_DELAY):
-            #         print(f"Delay must be between {SWEEP_MIN_DELAY} and {SWEEP_MAX_DELAY} ms.")
-            #         continue
-
-            #     bit1 = input("Enter bit0 (0 or 1): ").strip()
-            #     bit0 = input("Enter bit1 (0 or 1): ").strip()
-
-            #     if bit0 not in ('0', '1') or bit1 not in ('0', '1'):
-            #         print("bit0 and bit1 must be 0 or 1.")
-            #         continue
-
-            #     # for i in range(POT_MIN_BIT, POT_MAX_BIT + 1):
-            #     #     pot.wiper = i
-            #     #     print(f"Wiper: {i}, Bit0: {bit0}, Bit1: {bit1}")
-            #     #     time.sleep(delay / 1000.0)
+                break
 
             else:
                  # Split and parse the input
                 parts = user_input.split()
-                if len(parts) != 4:
-                    print("Please enter exactly 4 values: rc_pot amp_pot cap_bit1 cap_bit0")
+                if len(parts) != 3:
+                    print("Please enter exactly 3 values: RC_POT AMP_POT Freq mode")
                     continue
                 rc_pot_val = int(parts[0])
                 amp_pot_val = int(parts[1])
                 if not (POT_MIN_BIT <= rc_pot_val <= POT_MAX_BIT):
                     print(f"Wiper value must be between {POT_MIN_BIT} and {POT_MAX_BIT}.")
                     continue
-
-                bit1 = int(parts[2])
-                bit0 = int(parts[3])
-
-                if bit0 not in (0, 1) or bit1 not in (0, 1):
-                    print("bit0 and bit1 must be 0 or 1.")
+                
+                freq_mode = parts[2]
+                if freq_mode not in sq_tri_freq_map:
+                    print("Freq mode must be: low, mid, or high.")
                     continue
+                
+                cap0 = sine_freq_map[freq_mode][0]
+                cap1 = sine_freq_map[freq_mode][1]
 
                 for rc_pot in rc_pots:
                     rc_pot.wiper = rc_pot_val
                 amp_pot.wiper = amp_pot_val
-                sine_cap0.value = bit0
-                sine_cap1.value = bit1
-                print(f"\tRC_POT: {rc_pots[0].wiper} \n\tAMP_POT: {amp_pot.wiper} \n\tCAP_1: {bit1} \n\tCAP_0: {bit0}\n")
+                sine_cap0.value = cap0
+                sine_cap1.value = cap1
+                print(f"\tRC_POT: {rc_pot_val} \n\tAMP_POT: {amp_pot.wiper} \n\tCAP_1: {cap1} \n\tCAP_0: {cap0}\n")
+                
                 adc_print(ads)
 
+        # Handle faulty output
         except ValueError:
-            print(f"Invalid input. Please enter a number between {POT_MIN_BIT} and {POT_MAX_BIT}, 'sweep', or 'exit'.")
+            print("Invalid input. Format: <RC_POT 0–127> <AMP_POT 0-127> <Freq mode (low/mid/high)")
         
 def run_all_tests(i2c):
     test_gpio()
@@ -363,9 +374,29 @@ def main():
     pot_sin3 =          adafruit_ds3502.DS3502(sin_bus,    address=ADDR_SIN3)
     pot_amp  =          adafruit_ds3502.DS3502(sin_bus,    address=ADDR_AMP)
 
-    
-    square_tri_test(pot_sq_tri_rc, pot_sq_tri_fbk, gpio2, gpio3, ads)
-    # sine_test([pot_sin1, pot_sin2, pot_sin3], pot_amp, gpio0, gpio1, ads)
+    while True:
+        try:
+            user_input = input("Enter the following:\n "
+                               "\t'tests': tests initialization and connection of digital components"
+                               "\n\t'sin': configures the sine wave"
+                               "\n\t'sq_tri': configures the square and triangle wave"
+                               "\n\t'exit': exits the program\n")
+           
+            if user_input.lower() == 'exit':
+                print("Exiting.")
+                sys.exit(0)
+            
+            elif user_input == 'sq_tri':
+                config_sq_tri(pot_sq_tri_rc, pot_sq_tri_fbk, gpio2, gpio3, ads)
+            elif user_input == 'sin':
+                config_sine([pot_sin1, pot_sin2, pot_sin3], pot_amp, gpio0, gpio1, ads)
+            elif user_input == 'tests':
+                run_all_tests(i2c)
+            else:
+                raise ValueError
+        # Handle faulty output
+        except ValueError:
+            print("Invalid input. Enter 'tests', 'sin', 'sq_tri', or 'exit'")
 
 if __name__ == "__main__":
     main()
